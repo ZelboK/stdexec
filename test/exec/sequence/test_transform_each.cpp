@@ -67,7 +67,7 @@ TEST_CASE(
   "transform_each - transform sender applies adaptor to each item",
   "[sequence_senders][transform_each][iterate]") {
   auto range = [](auto from, auto to) {
-    return exec::iterate(std::ranges::views::iota(0, 10));
+    return exec::iterate(std::ranges::views::iota(from, to));
   };
   auto then_each = [](auto f) {
     return exec::transform_each(stdexec::then(f));
