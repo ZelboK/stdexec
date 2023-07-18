@@ -34,6 +34,7 @@ namespace exec {
 
       struct __t {
         using is_receiver = void;
+        using __id = __receiver;
         __operation_base<_Receiver, _Adaptor>* __op_;
 
         template <same_as<set_next_t> _SetNext, same_as<__t> _Self, class _Item>
@@ -77,6 +78,7 @@ namespace exec {
       using _Receiver = stdexec::__t<_ReceiverId>;
 
       struct __t : __operation_base<_Receiver, _Adaptor> {
+        using __id = __operation;
         subscribe_result_t<_Sender, stdexec::__t<__receiver<_ReceiverId, _Adaptor>>> __op_;
 
         __t(_Sender&& __sndr, _Receiver __rcvr, _Adaptor __adaptor)
@@ -85,7 +87,7 @@ namespace exec {
             _Adaptor>{static_cast<_Receiver&&>(__rcvr), static_cast<_Adaptor&&>(__adaptor)}
           , __op_{exec::subscribe(
               static_cast<_Sender&&>(__sndr),
-              stdexec::__t<__receiver<_Receiver, _Adaptor>>{this})} {
+              stdexec::__t<__receiver<_ReceiverId, _Adaptor>>{this})} {
         }
 
         friend void tag_invoke(start_t, __t& __self) noexcept {
@@ -113,7 +115,7 @@ namespace exec {
 
         template <class _Self, class _Env>
         using completion_sigs_t = completion_signatures_of_t<
-          __call_result_t<_Adaptor&, __some_sender<_Self, _Sender>>,
+          __call_result_t<_Adaptor&, __some_sender<_Self, _Env>>,
           _Env>;
 
         template <__decays_to<__t> _Self, receiver _Receiver>
@@ -140,7 +142,7 @@ namespace exec {
     };
 
     struct transform_each_t {
-      template <sender _Sender, class _Adaptor>
+      template <sender _Sender, __sender_adaptor_closure _Adaptor>
       auto operator()(_Sender&& __sndr, _Adaptor&& __adaptor) const
         noexcept(__nothrow_decay_copyable<_Sender> //
                    && __nothrow_decay_copyable<_Adaptor>)

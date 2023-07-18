@@ -17,6 +17,10 @@
 
 #include "exec/sequence/transform_each.hpp"
 
+#include "exec/sequence/any_sequence_of.hpp"
+#include "exec/sequence/empty_sequence.hpp"
+#include "exec/sequence/iterate.hpp"
+#include "exec/sequence/ignore_all_values.hpp"
 #include <catch2/catch.hpp>
 
 struct next_rcvr {
@@ -37,8 +41,19 @@ struct next_rcvr {
 };
 
 TEST_CASE(
-  "transform_each - transform sender applies adaptor",
+  "transform_each - transform sender applies adaptor to no elements",
   "[sequence_senders][transform_each][empty_sequence]") {
+  int counter = 0;
+  auto transformed = exec::transform_each(
+    exec::empty_sequence(), stdexec::then([&counter]() noexcept { ++counter; }));
+  auto op = exec::subscribe(transformed, next_rcvr{});
+  stdexec::start(op);
+  CHECK(counter == 0);
+}
+
+TEST_CASE(
+  "transform_each - transform sender applies adaptor to a sender",
+  "[sequence_senders][transform_each]") {
   int value = 0;
   auto transformed = exec::transform_each(
     stdexec::just(42), stdexec::then([&value](int x) noexcept { value = x; }));
@@ -46,3 +61,21 @@ TEST_CASE(
   stdexec::start(op);
   CHECK(value == 42);
 }
+
+#ifdef __cpp_lib_ranges
+TEST_CASE(
+  "transform_each - transform sender applies adaptor to each item",
+  "[sequence_senders][transform_each][iterate]") {
+  auto range = [](auto from, auto to) {
+    return exec::iterate(std::ranges::views::iota(0, 10));
+  };
+  auto then_each = [](auto f) {
+    return exec::transform_each(stdexec::then(f));
+  };
+  int total = 0;
+  auto sum = range(0, 10) //
+           | then_each([&total](int x) noexcept { total += x; });
+  stdexec::sync_wait(exec::ignore_all_values(sum));
+  CHECK(total == 45);
+}
+#endif
