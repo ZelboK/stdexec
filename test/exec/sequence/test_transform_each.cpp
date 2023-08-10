@@ -23,6 +23,12 @@
 #include "exec/sequence/ignore_all_values.hpp"
 #include <catch2/catch.hpp>
 
+#include <exec/on.hpp>
+#include <test_common/schedulers.hpp>
+#include <test_common/receivers.hpp>
+#include <test_common/senders.hpp>
+#include <test_common/type_helpers.hpp>
+
 struct next_rcvr {
   using __id = next_rcvr;
   using __t = next_rcvr;
@@ -62,6 +68,17 @@ TEST_CASE(
   CHECK(value == 42);
 }
 
+TEST_CASE(
+  "transform_each - transform sender applies adaptor to a sender and ignores all values",
+  "[sequence_senders][transform_each][ignore_all_values]") {
+  int value = 0;
+  auto transformed =
+    exec::transform_each(stdexec::just(42), stdexec::then([&value](int x) { value = x; }))
+    | exec::ignore_all_values();
+  stdexec::sync_wait(transformed);
+  CHECK(value == 42);
+}
+
 #if STDEXEC_HAS_RANGES()
 TEST_CASE(
   "transform_each - transform sender applies adaptor to each item",
@@ -79,3 +96,30 @@ TEST_CASE(
   CHECK(total == 45);
 }
 #endif
+
+struct my_domain {
+  template <class Sender, class Env>
+  static auto transform_sender(Sender snd, const Env&) {
+    if constexpr (ex::__lazy_sender_for<Sender, ex::then_t>)
+      return ex::just(std::string{"hallo"});
+    else
+      return (Sender&&) snd;
+  }
+};
+
+TEST_CASE("transform_each - can be customized late", "[transform_each][ignore_all_values]") {
+  // The customization will return a different value
+  basic_inline_scheduler<my_domain> sched;
+  std::string result = "";
+  auto start = ex::just(std::string{"hello"});
+  auto with_scheduler = exec::write(exec::with(ex::get_scheduler, inline_scheduler()));
+  auto adaptor = exec::on(sched, ex::then([](std::string x) { return x + ", world"; }))
+               | with_scheduler;
+  auto snd = start | exec::transform_each(adaptor)
+           | exec::transform_each(ex::then([&](std::string x) {
+               result = x;
+             }))
+           | exec::ignore_all_values();
+  stdexec::sync_wait(snd);
+  CHECK(result == "hallo");
+}
