@@ -16,9 +16,9 @@
  */
 #pragma once
 
-#if __has_include(<version>)
-#include <version>
-#ifdef __cpp_lib_ranges
+#include "../../stdexec/__detail/__config.hpp"
+
+#if STDEXEC_HAS_RANGES()
 
 #include "../sequence_senders.hpp"
 
@@ -150,21 +150,20 @@ namespace exec {
         using __id = __sequence;
         using is_sender = sequence_tag;
 
-        using completion_signatures = stdexec::completion_signatures<
-          set_value_t(std::ranges::range_reference_t<_Range>),
-          set_error_t(std::exception_ptr),
-          set_stopped_t()>;
+        using completion_signatures = stdexec::
+          completion_signatures<set_value_t(), set_error_t(std::exception_ptr), set_stopped_t()>;
+
+        using item_types = exec::item_types<__sender_t<_Range>>;
 
         STDEXEC_NO_UNIQUE_ADDRESS _Range __range_;
 
         template <class _Receiver>
         using __next_receiver_t = stdexec::__t<__next_receiver<_Range, stdexec::__id<_Receiver>>>;
 
-        template < __decays_to<__t> _Self, sequence_receiver_of<completion_signatures> _Receiver>
+        template < __decays_to<__t> _Self, sequence_receiver_of<item_types> _Receiver>
           requires sender_to<
             __next_sender_of_t<_Receiver, __sender_t<_Range>>,
-            __next_receiver_t<_Receiver>
-            >
+            __next_receiver_t<_Receiver> >
         friend auto tag_invoke(subscribe_t, _Self&& __self, _Receiver __rcvr) //
           noexcept(__nothrow_decay_copyable<_Receiver>)
             -> stdexec::__t<__operation<_Range, stdexec::__id<_Receiver>>> {
@@ -189,5 +188,4 @@ namespace exec {
   inline constexpr iterate_t iterate;
 }
 
-#endif
-#endif
+#endif // STDEXEC_HAS_RANGES()

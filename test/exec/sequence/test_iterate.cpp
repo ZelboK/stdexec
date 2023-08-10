@@ -16,9 +16,11 @@
  */
 
 #include "exec/sequence/iterate.hpp"
+#include "stdexec/execution.hpp"
 
-#ifdef __cpp_lib_ranges
+#if STDEXEC_HAS_RANGES()
 
+#include <array>
 #include <catch2/catch.hpp>
 
 template <class Receiver>
@@ -94,11 +96,11 @@ struct sum_receiver {
 TEST_CASE("iterate - sum up an array ", "[sequence_senders][iterate]") {
   std::array<int, 3> array{42, 43, 44};
   int sum = 0;
-  auto iterate = exec::iterate(std::ranges::views::all(array));
+  auto iterate = exec::iterate(std::views::all(array));
   STATIC_REQUIRE(exec::sequence_sender_in<decltype(iterate), stdexec::empty_env>);
   auto op = exec::subscribe(iterate, sum_receiver{sum});
   stdexec::start(op);
   CHECK(sum == (42 + 43 + 44));
 }
 
-#endif  // __cpp_lib_ranges
+#endif // STDEXEC_HAS_RANGES()

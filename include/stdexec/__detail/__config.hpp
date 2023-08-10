@@ -19,7 +19,14 @@
 #error This library requires the use of C++20.
 #endif
 
+#if __has_include(<version>)
+#include <version>
+#else
+#include <ciso646> // For stdlib feature-test macros when <version> is not available
+#endif
+
 #include <cassert>
+#include <version>
 
 #define STDEXEC_CAT_(_XP, ...) _XP##__VA_ARGS__
 #define STDEXEC_CAT(_XP, ...) STDEXEC_CAT_(_XP, __VA_ARGS__)
@@ -43,7 +50,9 @@
 #define STDEXEC_CHECK_N(_XP, _NP, ...) _NP
 #define STDEXEC_PROBE(_XP) _XP, 1,
 
-#if defined(__NVCOMPILER)
+#if defined(__NVCC__)
+#define STDEXEC_NVCC() 1
+#elif defined(__NVCOMPILER)
 #define STDEXEC_NVHPC() 1
 #elif defined(__clang__)
 #define STDEXEC_CLANG() 1
@@ -53,6 +62,9 @@
 #define STDEXEC_MSVC() 1
 #endif
 
+#ifndef STDEXEC_NVCC
+#define STDEXEC_NVCC() 0
+#endif
 #ifndef STDEXEC_NVHPC
 #define STDEXEC_NVHPC() 0
 #endif
@@ -66,7 +78,7 @@
 #define STDEXEC_MSVC() 0
 #endif
 
-#if STDEXEC_CLANG()
+#if STDEXEC_CLANG() || STDEXEC_GCC()
 #define STDEXEC_STRINGIZE(_ARG) #_ARG
 #define STDEXEC_PRAGMA_PUSH() _Pragma("GCC diagnostic push")
 #define STDEXEC_PRAGMA_POP() _Pragma("GCC diagnostic pop")
@@ -89,7 +101,7 @@
 #define STDEXEC_IS_TRIVIALLY_COPYABLE(...) std::is_trivially_copyable_v<__VA_ARGS__>
 #endif
 
-#if STDEXEC_HAS_BUILTIN(__is_base_of) || STDEXEC_MSVC()
+#if STDEXEC_HAS_BUILTIN(__is_base_of) || (_MSC_VER >= 1914)
 #define STDEXEC_IS_BASE_OF(...) __is_base_of(__VA_ARGS__)
 #else
 #define STDEXEC_IS_BASE_OF(...) std::is_base_of_v<__VA_ARGS__>
@@ -101,6 +113,16 @@
 #define STDEXEC_IS_CONVERTIBLE_TO(...) __is_convertible(__VA_ARGS__)
 #else
 #define STDEXEC_IS_CONVERTIBLE_TO(...) std::is_convertible_v<__VA_ARGS__>
+#endif
+
+#if defined(__cpp_lib_unreachable) && __cpp_lib_unreachable >= 202202L
+#define STDEXEC_UNREACHABLE() std::unreachable()
+#elif STDEXEC_HAS_BUILTIN(__builtin_unreachable)
+#define STDEXEC_UNREACHABLE() __builtin_unreachable()
+#elif STDEXEC_MSVC()
+#define STDEXEC_UNREACHABLE(...) __assume(false)
+#else
+#define STDEXEC_UNREACHABLE(...) std::terminate()
 #endif
 
 // Before gcc-12, gcc really didn't like tuples or variants of immovable types
@@ -143,6 +165,15 @@
 #define STDEXEC_TERMINATE() std::terminate()
 #endif
 
+// Before clang-16, clang did not like libstdc++'s ranges implementation
+#if __has_include(<ranges>) && \
+  (defined(__cpp_lib_ranges) && __cpp_lib_ranges >= 201911L) && \
+  (!STDEXEC_CLANG() || __clang_major__ >= 16 || defined(_LIBCPP_VERSION))
+#define STDEXEC_HAS_RANGES() 1
+#else
+#define STDEXEC_HAS_RANGES() 0
+#endif
+
 #ifdef STDEXEC_ASSERT
 #error "Redefinition of STDEXEC_ASSERT is not permitted. Define STDEXEC_ASSERT_FN instead."
 #endif
@@ -155,6 +186,35 @@
 
 #ifndef STDEXEC_ASSERT_FN
 #define STDEXEC_ASSERT_FN assert
+#endif
+
+#define STDEXEC_AUTO_RETURN(...) \
+  noexcept(noexcept(__VA_ARGS__))->decltype(__VA_ARGS__) { \
+    return __VA_ARGS__; \
+  }
+
+#if STDEXEC_CLANG() || (STDEXEC_GCC() && __GNUC__ >= 13)
+#define STDEXEC_FRIENDSHIP_IS_LEXICAL() 1
+#else
+#define STDEXEC_FRIENDSHIP_IS_LEXICAL() 0
+#endif
+
+#if defined(__cpp_explicit_this_parameter) && (__cpp_explicit_this_parameter >= 202110)
+#define STDEXEC_HAS_EXPLICIT_THIS() 1
+#else
+#define STDEXEC_HAS_EXPLICIT_THIS() 0
+#endif
+
+#if STDEXEC_HAS_EXPLICIT_THIS()
+#define STDEXEC_DEFINE_EXPLICIT_THIS_MEMFN(...) __VA_ARGS__
+#define STDEXEC_CALL_EXPLICIT_THIS_MEMFN(_OBJ, _NAME) (_OBJ)._NAME( STDEXEC_CALL_EXPLICIT_THIS_MEMFN_DETAIL
+#define STDEXEC_CALL_EXPLICIT_THIS_MEMFN_DETAIL(...) __VA_ARGS__ )
+#else
+#define STDEXEC_DEFINE_EXPLICIT_THIS_MEMFN(...) static __VA_ARGS__(STDEXEC_FUN_ARGS
+#define STDEXEC_CALL_EXPLICIT_THIS_MEMFN(_OBJ, _NAME) (_OBJ)._NAME((_OBJ) STDEXEC_CALL_EXPLICIT_THIS_MEMFN_DETAIL
+#define STDEXEC_CALL_EXPLICIT_THIS_MEMFN_DETAIL(...) __VA_OPT__(, ) __VA_ARGS__)
+#define STDEXEC_EAT_THIS_DETAIL_this
+#define STDEXEC_FUN_ARGS(...) STDEXEC_CAT(STDEXEC_EAT_THIS_DETAIL_, __VA_ARGS__))
 #endif
 
 namespace stdexec {
