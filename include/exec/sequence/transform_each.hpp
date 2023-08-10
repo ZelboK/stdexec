@@ -96,37 +96,36 @@ namespace exec {
       };
     };
 
-    template <class _SenderId, class _Adaptor>
-    struct __sender {
-      using _Sender = stdexec::__t<_SenderId>;
+    template <class _SequenceId, class _Adaptor>
+    struct __sequence {
+      using _Sequence = stdexec::__t<_SequenceId>;
 
       struct __t {
         using is_sender = sequence_tag;
-        using __id = __sender;
+        using __id = __sequence;
 
-        _Sender __sender_;
+        _Sequence __sequence_;
         _Adaptor __adaptor_;
 
         template <class _Self, class _Env>
-        using __some_sender = __copy_cvref_t<
-          _Self,
-          __sequence_sndr::__unspecified_sender_of<
-            completion_signatures_of_t<__copy_cvref_t<_Self, _Sender>, _Env>>>;
+        using completion_sigs_t =
+          __sequence_completion_signatures_of_t<__copy_cvref_t<_Self, _Sequence>, _Env>;
 
-        template <class _Self, class _Env>
-        using completion_sigs_t = completion_signatures_of_t<
-          __call_result_t<_Adaptor&, __some_sender<_Self, _Env>>,
-          _Env>;
+        using item_types = stdexec::__mapply<
+          stdexec::__transform<
+            stdexec::__mbind_front_q<__call_result_t, _Adaptor&>,
+            stdexec::__munique<stdexec::__q<item_types>>>,
+          item_types_of_t<_Sequence>>;
 
         template <__decays_to<__t> _Self, receiver _Receiver>
-        requires sequence_receiver_of<_Receiver, completion_sigs_t<_Self, env_of_t<_Receiver>>>
-              && sequence_sender_to<
-                   __copy_cvref_t<_Self, _Sender>,
-                   stdexec::__t<__receiver<stdexec::__id<_Receiver>, _Adaptor>>>
+          requires sequence_receiver_of<_Receiver, item_types>
+                && sequence_sender_to<
+                     __copy_cvref_t<_Self, _Sequence>,
+                     stdexec::__t<__receiver<stdexec::__id<_Receiver>, _Adaptor>>>
         friend auto tag_invoke(subscribe_t, _Self&& __self, _Receiver __rcvr) -> stdexec::__t<
-          __operation<__copy_cvref_t<_Self, _Sender>, stdexec::__id<_Receiver>, _Adaptor>> {
+          __operation<__copy_cvref_t<_Self, _Sequence>, stdexec::__id<_Receiver>, _Adaptor>> {
           return {
-            static_cast<_Self&&>(__self).__sender_,
+            static_cast<_Self&&>(__self).__sequence_,
             static_cast<_Receiver&&>(__rcvr),
             static_cast<_Self&&>(__self).__adaptor_};
         }
@@ -135,19 +134,43 @@ namespace exec {
         friend auto tag_invoke(get_completion_signatures_t, _Self&&, _Env&&)
           -> completion_sigs_t<_Self, _Env>;
 
-        friend env_of_t<_Sender> tag_invoke(get_env_t, const __t& __self) noexcept {
-          return stdexec::get_env(__self.__sender_);
+        friend env_of_t<_Sequence> tag_invoke(get_env_t, const __t& __self) noexcept {
+          return stdexec::get_env(__self.__sequence_);
         }
       };
     };
 
+    template <class _Adaptor>
+    struct _NOT_CALLABLE_ADAPTOR_ { };
+
+    template <class _Item>
+    struct _WITH_ITEM_SENDER_ { };
+
+    template <class _Adaptor, class _Item>
+    auto __try_call(_Item*)
+      -> stdexec::__mexception<_NOT_CALLABLE_ADAPTOR_<_Adaptor&>, _WITH_ITEM_SENDER_<_Item>>;
+
+    template <class _Adaptor, class _Item>
+      requires stdexec::__callable<_Adaptor&, _Item>
+    stdexec::__msuccess __try_call(_Item*);
+
+    template <class _Adaptor, class... _Items>
+    auto __try_calls(item_types<_Items...>*)
+      -> decltype((stdexec::__msuccess() && ... && __try_call<_Adaptor>((_Items*) nullptr)));
+
+    template <class _Adaptor, class _Items>
+    concept __callabale_adaptor_for = requires(_Items* __items) {
+      { __try_calls<stdexec::__decay_t<_Adaptor>>(__items) } -> stdexec::__ok;
+    };
+
     struct transform_each_t {
-      template <sender _Sender, __sender_adaptor_closure _Adaptor>
-      auto operator()(_Sender&& __sndr, _Adaptor&& __adaptor) const
-        noexcept(__nothrow_decay_copyable<_Sender> //
+      template <sender _Sequence, __sender_adaptor_closure _Adaptor>
+        requires __callabale_adaptor_for<_Adaptor, item_types_of_t<_Sequence>>
+      auto operator()(_Sequence&& __sndr, _Adaptor&& __adaptor) const
+        noexcept(__nothrow_decay_copyable<_Sequence> //
                    && __nothrow_decay_copyable<_Adaptor>)
-          -> __t<__sender<__id<__decay_t<_Sender>>, __decay_t<_Adaptor>>> {
-        return {static_cast<_Sender&&>(__sndr), static_cast<_Adaptor&&>(__adaptor)};
+          -> __t<__sequence<__id<__decay_t<_Sequence>>, __decay_t<_Adaptor>>> {
+        return {static_cast<_Sequence&&>(__sndr), static_cast<_Adaptor&&>(__adaptor)};
       }
 
       template <class _Adaptor>
