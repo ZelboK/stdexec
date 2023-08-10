@@ -62,7 +62,7 @@ TEST_CASE(
   CHECK(value == 42);
 }
 
-#ifdef __cpp_lib_ranges
+#if STDEXEC_HAS_RANGES()
 TEST_CASE(
   "transform_each - transform sender applies adaptor to each item",
   "[sequence_senders][transform_each][iterate]") {
